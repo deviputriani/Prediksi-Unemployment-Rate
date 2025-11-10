@@ -10,7 +10,7 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 st.set_page_config(page_title="Prediksi Unemployment Rate", layout="wide")
 
 st.title("Sistem Prediksi Pengangguran Menggunakan Data Ekonomi Makro")
-st.write("Menggunakan **LightGBM**, **ETS**, dan Preprocessing")
+st.write("Menggunakan **LightGBM**, **ETS**, dan Preprocessing**")
 
 # 1. UPLOAD DATASET
 uploaded_file = st.file_uploader("Upload Dataset CSV", type=["csv"])
@@ -19,7 +19,6 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
     # CLEANING COLUMN NAMES
-
     df.columns = [
         c.strip()
         .replace(" ", "_")
@@ -37,9 +36,7 @@ if uploaded_file:
     st.subheader("Sample Data 10")
     st.dataframe(df.head(10))
 
-
     # 2. VALIDASI KOLOM
-
     required_cols = ["country_name", "year", "unemployment_rate_pct"]
 
     if not all(col in df.columns for col in required_cols):
@@ -48,15 +45,13 @@ if uploaded_file:
         st.stop()
 
     st.success("Dataset valid")
-
     st.markdown("---")
 
-
     # 3. EDA
-
     st.header("Exploratory Data Analysis (EDA)")
 
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+
     st.subheader("Histogram Fitur Numerik")
     fitur_hist = st.selectbox("Pilih fitur numerik:", numeric_cols)
 
@@ -86,9 +81,7 @@ if uploaded_file:
 
     st.markdown("---")
 
-
     # 4. PREPROCESSING KOMPLIT
-
     st.header("PREPROCESSING DATA (Lengkap)")
 
     negara_list = df["country_name"].unique()
@@ -140,12 +133,9 @@ if uploaded_file:
     st.write(f"Validation: {val.shape[0]} baris")
 
     st.success("Preprocessing lengkap selesai!")
-
     st.markdown("---")
 
-
     # 5. MODEL LIGHTGBM + PATCH ERROR
-
     st.header("Prediksi Menggunakan LightGBM")
 
     feature_cols = st.multiselect(
@@ -163,6 +153,33 @@ if uploaded_file:
 
     st.success("Model LightGBM berhasil dilatih!")
 
+    # ============================================================
+    # ✅ 5.1 EVALUASI MODEL PADA DATA VALIDATION
+    # ============================================================
+    st.subheader("Evaluasi Model pada Data Validation")
+
+    if val.shape[0] == 0:
+        st.warning("Tidak ada data validation. Metrik evaluasi tidak dapat dihitung.")
+    else:
+        X_val = val[all_features]
+        y_val = val["unemployment_rate_pct"]
+
+        y_pred_val = model_lgb.predict(X_val)
+
+        MAE = np.mean(np.abs(y_val - y_pred_val))
+        RMSE = np.sqrt(np.mean((y_val - y_pred_val)**2))
+        MAPE = np.mean(np.abs((y_val - y_pred_val) / y_val)) * 100
+
+        eval_df = pd.DataFrame({
+            "Metrik": ["MAE", "RMSE", "MAPE (%)"],
+            "Nilai": [round(MAE, 4), round(RMSE, 4), round(MAPE, 4)]
+        })
+
+        st.table(eval_df)
+
+    st.markdown("---")
+
+    # MULAI PREDIKSI FUTURE
     pred_years = list(range(2025, 2031))
     pred_dict = {c: [] for c in negara_pilih}
 
@@ -196,7 +213,6 @@ if uploaded_file:
         for idx, country in enumerate(valid_countries):
             pred_dict[country].append(pred_values[idx])
 
-    # PATCH: HANYA NEGARA DENGAN DATA LENGKAP YANG DIPAKAI
     valid_pred_dict = {k: v for k, v in pred_dict.items() if len(v) == len(pred_years)}
 
     if not valid_pred_dict:
@@ -213,6 +229,7 @@ if uploaded_file:
         df_c = df[df["country_name"] == country]
         plt.plot(df_c["year"], df_c["unemployment_rate_pct"], marker="o", label=f"{country} Aktual")
         plt.plot(pred_years, df_pred_lgb[country], marker="x", linestyle="--", label=f"{country} Prediksi")
+
     plt.legend(bbox_to_anchor=(1.05,1), loc="upper left")
     plt.title("Prediksi Unemployment Rate - LightGBM")
     st.pyplot(plt.gcf())
@@ -220,6 +237,7 @@ if uploaded_file:
 
     st.markdown("---")
 
+    # 6. ETS MODEL
     st.header("Prediksi Menggunakan ETS")
 
     forecast_dict = {}
@@ -228,7 +246,7 @@ if uploaded_file:
         ts = df[df["country_name"] == country].sort_values("year")["unemployment_rate_pct"]
 
         if len(ts) < 2:
-            st.warning(f"Negara {country} tidak punya data cukup untuk ETS.")
+            st.warning(f"Negara {country} tidak cukup untuk ETS.")
             continue
 
         ets_model = ExponentialSmoothing(ts, trend="add")
@@ -248,6 +266,7 @@ if uploaded_file:
             df_c = df[df["country_name"] == country]
             plt.plot(df_c["year"], df_c["unemployment_rate_pct"], marker="o")
             plt.plot(pred_years, df_pred_ets[country], marker="x", linestyle="--")
+
         plt.title("Prediksi Unemployment Rate - ETS")
         st.pyplot(plt.gcf())
         plt.clf()
